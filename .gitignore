@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# PDM
+.pdm-python
+.pdm-build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project data — raw NSynth downloads and extracted audio
+data/nsynth-*/
+data/*.tar.gz
+data/*.wav
+
+# Checkpoints
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# W&B
+wandb/
+
+# Hydra outputs
+outputs/
+multirun/
+
+# Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local

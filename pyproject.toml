@@ -1,0 +1,48 @@
+[project]
+name = "sami-audio"
+version = "0.1.0"
+description = "SAMI-Audio: Unsupervised disentanglement of pitch and timbre via Score-based Variational Autoencoder"
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Alessandro Gautieri", email = "alessandro.gautieri@example.com"},
+]
+dependencies = [
+    "torch>=2.3",
+    "torchaudio>=2.3",
+    "accelerate>=0.30",
+    "einops>=0.8",
+    "hydra-core>=1.3",
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "torchmetrics>=1.0",
+    "umap-learn>=0.5",
+    "matplotlib>=3.7",
+    "scikit-learn>=1.3",
+    "tqdm>=4.65",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "wandb>=0.17",
+    "torchcrepe>=0.0.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ipython>=8.0",
+    "jupyter>=1.0",
+    "pytest>=7.0",
+]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm]
+distribution = false
+
+[tool.pdm.scripts]
+# Gate 0 sanity check — tests dataset preprocessing end-to-end
+gate0 = {cmd = "python -m data.nsynth", help = "Run Gate 0 sanity check on NSynth dataset"}
+# Download NSynth dataset
+download = {cmd = "bash data/download.sh", help = "Download and filter NSynth subset"}
