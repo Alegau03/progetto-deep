@@ -116,6 +116,32 @@ Dopo crop/pad:   (1, 128, 256) in [-1, 1]
 - Il dataset originale è ~21 GB; dopo filtraggio ~4 GB
 - Se `data/nsynth-train/` non esiste, eseguire `bash data/download.sh`
 
+## Esecuzione su Cluster GPU
+
+### SLURM
+```bash
+sbatch scripts/train_toy.slurm    # Phase 1: Toy model
+sbatch scripts/train_nsynth.slurm # Phase 2/3: NSynth (da creare)
+```
+
+### Sessione interattiva
+```bash
+srun --gres=gpu:1 --time=04:00:00 --pty bash
+.venv/bin/python train.py --use-wandb
+```
+
+### Trasferimento risultati
+```bash
+# Dal cluster al Mac
+rsync -avz user@cluster:/path/to/sami-audio/checkpoints/ ./checkpoints/
+rsync -avz user@cluster:/path/to/sami-audio/plots/ ./plots/
+```
+
+### Monitoraggio
+- **Wandb:** dashboard in tempo reale (streaming dal cluster)
+- **SLURM:** `squeue -u $USER`, `tail -f logs/sami_toy_*.out`
+- **GPU:** `ssh cluster nvidia-smi`
+
 ## Convenzioni di Codice
 
 - **Niente commenti superflui** nei file .py. I commenti spiegano il *perché*, non il *cosa*.

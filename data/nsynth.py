@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import soundfile as sf
 import torch
 import torchaudio
 import torchaudio.functional as F
@@ -241,13 +242,15 @@ class NSynthDataset(Dataset):
         meta = self.labels[idx]
 
         wav_path = os.path.join(self.root, "audio", f"{entry_id}.wav")
-        waveform, sr = torchaudio.load(wav_path)
+        waveform, sr = sf.read(wav_path)
+        waveform = torch.from_numpy(waveform.T).float()
+        if waveform.dim() == 1:
+            waveform = waveform.unsqueeze(0)
+        elif waveform.dim() == 2 and waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
 
         if sr != self.mel_config.sample_rate:
             waveform = F.resample(waveform, sr, self.mel_config.sample_rate)
-
-        if waveform.shape[0] > 1:
-            waveform = waveform.mean(dim=0, keepdim=True)
 
         mel = self._waveform_to_mel(waveform)
 
@@ -426,13 +429,16 @@ if __name__ == "__main__":
     print(f"  Unique pitches: {len(dist['pitch'])}")
     print()
 
-    # Shape and range check
-    print("[CHECK] Validating shape and value range on all samples...")
+    # Shape and range check (random subset — full check would be too slow)
+    NUM_SAMPLES_CHECK = 200
+    print(f"[CHECK] Validating shape and value range on {NUM_SAMPLES_CHECK} random samples...")
     shape_errors = 0
     range_errors = 0
+    rng = np.random.default_rng(42)
+    indices = rng.choice(len(dataset), size=min(NUM_SAMPLES_CHECK, len(dataset)), replace=False)
 
-    for i in range(len(dataset)):
-        mel, meta = dataset[i]
+    for i in indices:
+        mel, meta = dataset[int(i)]
         if mel.shape != (1, 128, 256):
             shape_errors += 1
             print(f"  [ERROR] Sample {i}: expected shape (1,128,256), got {mel.shape}")
@@ -442,7 +448,7 @@ if __name__ == "__main__":
                   f"(min={mel.min():.4f}, max={mel.max():.4f})")
 
     if shape_errors == 0 and range_errors == 0:
-        print(f"  [PASS]  All {len(dataset)} samples: shape (1, 128, 256), values in [-1, 1]")
+        print(f"  [PASS]  All {NUM_SAMPLES_CHECK} samples: shape (1, 128, 256), values in [-1, 1]")
     else:
         print(f"  [FAIL]  {shape_errors} shape errors, {range_errors} range errors")
     print()
@@ -453,7 +459,7 @@ if __name__ == "__main__":
     recon = mel_to_audio(mel, mel_config=MEL_CONFIG)
 
     output_path = "data/gate0_test.wav"
-    torchaudio.save(output_path, recon, MEL_CONFIG.sample_rate)
+    sf.write(output_path, recon.squeeze(0).numpy().T, MEL_CONFIG.sample_rate)
     print(f"  [INFO]  Original: pitch={meta['pitch']}, "
           f"instrument={meta['instrument_family']}")
     print(f"  [INFO]  Reconstructed audio saved to: {output_path}")

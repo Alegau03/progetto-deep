@@ -119,6 +119,8 @@ log_ok "Extraction complete — ${TOTAL_WAVS} .wav files found"
 # --- Step 3: Filter -------------------------------------------------------------
 log_info "Step 3/4 — Filtering dataset (4 families, pitch 48-84)..."
 
+export EXTRACT_DIR="${EXTRACT_DIR}"
+
 python3 << 'PYEOF'
 import json
 import os

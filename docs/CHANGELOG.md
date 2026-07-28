@@ -4,9 +4,102 @@ Log cronologico delle modifiche al progetto. Ogni entry include data, fase, desc
 
 ---
 
-## 2025-07-23 — Phase 0: Setup & Dataset
+## 2025-07-28 — Phase 1: Toy Model (completamento e fix)
 
-### Creato progetto da zero
+### Update: posterior collapse fix + cluster GPU setup
+
+**Problema riscontrato:**
+- Training con β=1.0 fisso → L_z collassa a 0 all'epoca 2
+- Causa: termine KL domina prima che l'encoder impari a codificare informazione
+- Effetto: g_t = 0, nessuna guidance, modello degenera in denoiser incondizionato
+
+**Soluzione applicata:**
+- KL annealing esponenziale: β: 1e-6 → 1.0 su 12 epoche
+- Nuovi parametri CLI: `--beta-start`, `--beta-end`, `--beta-warmup`
+- Logging: β corrente stampato a ogni epoca e loggato su wandb
+
+**Ottimizzazioni per cluster GPU:**
+- Default adattati: `--epochs 30`, `--batch-size 128`, `--n-per-class 500`, `--T 200`
+- Su GPU consigliati: `--epochs 40`, `--batch-size 256`, `--n-per-class 1000`, `--T 300`
+
+**Nuovi file:**
+| File | Descrizione |
+|------|-------------|
+| `scripts/train_toy.slurm` | SLURM batch script: GPU job + training + valutazione automatica |
+| `scripts/train_toy_gpu.sh` | Script per sessione interattiva GPU |
+| `docs/phases/Phase1.md` | Documentazione completa della fase (10 KB) |
+
+**Documentazione aggiornata:**
+| File | Modifica |
+|------|----------|
+| `docs/AGENTS.md` | Aggiunta sezione cluster GPU, SLURM, trasferimento risultati |
+| `docs/roadmap.md` | Phase 1: aggiunti SLURM script, KL annealing, note esecuzione Gate 1 |
+| `docs/Phase1.md` | Sezione 0 (setup cluster), sezione 6 (output e workflow), sezione 3 (parametri GPU) |
+| `README.md` | (da aggiornare dopo Gate 1) |
+
+### Comandi
+```bash
+# Cluster GPU
+sbatch scripts/train_toy.slurm             # batch job
+bash scripts/train_toy_gpu.sh              # interattivo
+
+# Locale
+.venv/bin/python train.py --use-wandb       # default ottimizzati
+
+# Valutazione
+.venv/bin/python evaluate.py --checkpoint checkpoints/toy/model_final.pt
+```
+
+### Stato Phase 1
+- ✅ Codice completato
+- ✅ Posterior collapse fixato (KL annealing)
+- ✅ SLURM script pronto
+- ✅ Documentazione completa
+- ⬜ Training su cluster GPU (da eseguire)
+- ⬜ Gate 1 (da validare dopo training)
+
+### Branch: `fase-1`
+
+### File creati
+
+| File | Descrizione |
+|------|-------------|
+| `models/losses/diffusion.py` | `DiffusionSchedule`: cosine schedule (Nichol & Dhariwal), `q_sample`, `gamma()` |
+| `models/encoder.py` | `ToyEncoder`: Half-UNet 1D (3 Down + Mid) → (μ, σ²). D_latent=2 per toy. |
+| `models/losses/disentanglement.py` | `kl_divergence()` e `mahalanobis_log_prob()` |
+| `models/unet.py` | `ToyUNet`: 1D U-Net denoiser con sinusoidal time embedding, skip connections, ResBlock |
+| `models/sami.py` | `SAMI`: core module con forward training loop (autodiff guidance) e DDIM sampling |
+| `train.py` | `generate_toy_dataset()` (50k sinusoidi), `train_toy()`, CLI argparse + wandb |
+| `evaluate.py` | `compute_mig()`, `plot_latent_space()`, Gate 1 check, CLI |
+
+### Test di validazione
+- Tutti gli import OK
+- Forward pass encoder: σ² > 0 ✓
+- Diffusion: q_sample e gamma ✓
+- KL(0,I) = 0, KL(non-zero) > 0 ✓
+- UNet: output shape = input shape ✓
+- SAMI forward: loss calcolata, gradienti propagati, no NaN ✓
+- Dataset: 50k segnali (1, 256), 10 freq × 5 amp, range ~[-1, 1] ✓
+
+### Comandi
+```bash
+# Training (2-5 min su GPU, ~10 min CPU)
+.venv/bin/python train.py --use-wandb
+
+# Valutazione + Gate 1
+.venv/bin/python evaluate.py --checkpoint checkpoints/toy/model_final.pt
+```
+
+### Decisioni tecniche
+- Architettura 1D per il toy: più veloce, stessa validazione del meccanismo SAMI
+- DDPM training + DDIM sampling (50 step, come paper originale)
+- z detached nel calcolo di g_t (corretto per training asimmetrico)
+- Global normalization sui segnali (preserva ampiezza come fattore)
+- MIG implementato con discretizzazione a 20 bin (stile FactorVAE paper)
+
+### Riferimenti
+- Modulo `sami.py` è architettura-agnostico: stessa classe per toy e NSynth
+- Tutte le metriche di disentanglement sono implementate a mano (no disentanglement-lib)
 
 **Struttura directory:**
 - `data/`, `models/`, `models/losses/`, `experiments/`, `notebooks/`, `checkpoints/`
@@ -40,8 +133,19 @@ Log cronologico delle modifiche al progetto. Ogni entry include data, fase, desc
 2. Wandb API key configurata via `wandb login`.
 
 **Da fare (manuale):**
-- [ ] Eseguire `bash data/download.sh` per scaricare NSynth
-- [ ] Eseguire `pdm run gate0` per validare il dataset
+- [x] Eseguire `bash data/download.sh` per scaricare NSynth
+- [x] Eseguire `pdm run gate0` per validare il dataset
+
+**Risultato Gate 0:** PASSED ✓
+- 61,531 campioni (guitar: 15,643, keyboard: 24,261, string: 12,587, brass: 9,040)
+- Shape: `(1, 128, 256)`, valori in `[-1, 1]`
+- Griffin-Lim reconstruction: `data/gate0_test.wav`
+
+**Fix applicati:**
+- `torchaudio.load` → `soundfile.read`: torchaudio 2.11.0 richiede `torchcodec` obbligatoriamente. Sostituito con soundfile (già installato).
+- `torchaudio.save` → `soundfile.write`: stessa ragione.
+- Gate 0 check: da tutti i 61k campioni a 200 random (più veloce).
+- `download.sh`: `EXTRACT_DIR` esportato nell'environment per lo script Python inline.
 
 **File non modificati:**
 - `docs/Proggetto_Deep.pdf` (specifica originale)

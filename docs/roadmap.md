@@ -40,57 +40,73 @@ pdm run gate0
 
 ### Note
 - Drop-in per `crepe`: usiamo `torchcrepe` (PyTorch port). L'API è diversa — da adattare in Phase 4.
-- NSynth NON ancora scaricato (da fare manualmente: `bash data/download.sh`).
+- NSynth scaricato e filtrato: 61,531 campioni in `data/nsynth-train/`.
+- Gate 0 PASSED ✓
 
 ---
 
-## Phase 1 — Toy Model 🔲
+## Phase 1 — Toy Model ✅ (CODICE PRONTO — eseguire su cluster GPU)
 
 **Obiettivo:** Validare il meccanismo di guidance SAMI su sinusoidi sintetiche.
-**Durata:** giorni 2-5
+**Stato:** CODICE COMPLETATO (2025-07-28), pronto per esecuzione su cluster GPU.
+**Esecuzione:** `sbatch scripts/train_toy.slurm`
 **Dataset:** Sinusoidi generate proceduralmente — 10 frequenze × 5 ampiezze = 50 classi, ~1000 campioni/classe.
 **Fattori ground-truth:** frequenza (= pitch), ampiezza (= dinamica).
 **Latente:** 2D (per visualizzazione diretta in scatter plot).
 
 ### Task
 
-- [ ] `models/encoder.py` — Half-UNet minimale
+- [x] `models/encoder.py` — Half-UNet minimale (1D)
   - Solo blocchi Down + Mid (niente Up)
-  - Base channels 64, channel multiplier `[1,1,1,1]`
-  - Due teste MLP: μ (dim=D_latent) e vettore → Softplus + quadratura → σ²
+  - Base channels 32, 3 livelli di downsampling (stride 2)
+  - Due teste MLP: μ (dim=D_latent) e logvar → Softplus + ε → σ²
   - `D_latent = 2` per toy model
   - **Test:** forward pass, shape corrette, σ² > 0
 
-- [ ] `models/losses/diffusion.py` — Diffusion utilities
-  - Cosine noise schedule (Nichol & Dhariwal)
+- [x] `models/losses/diffusion.py` — Diffusion utilities
+  - Cosine noise schedule (Nichol & Dhariwal), T=1000, s=0.008
   - `q_sample(x0, t, noise)`: forward diffusion step
   - `alphas`, `alphas_cumprod` (ᾱ_t), `betas`
+  - `gamma(t)`: √(1 - ᾱ_t) per guidance
   - **Test:** ᾱ_t monotona decrescente, `q_sample` produce rumore crescente con t
 
-- [ ] `models/sami.py` — Core SAMI module
+- [x] `models/sami.py` — Core SAMI module (architettura-agnostico)
   - `encode(x)`: chiama encoder, produce z via reparameterization
-  - `log_q(z, mu, sigma)`: log-verosimiglianza gaussiana con Mahalanobis
-  - `g_t = torch.autograd.grad(log_q.sum(), xt, create_graph=True)`: guidance score
-  - `loss(x0)`: encode pulito → z, encode rumoroso → g_t, L_x + β·L_z
-  - `sample(z)`: DDIM reverse process con guidance
-  - **Test isolato:** shape gradienti corrette, no NaN, loss decresce
+  - `_log_q_and_grad(z, xt)`: Mahalanobis + autograd.grad con create_graph=True
+  - `forward(x0)`: encode pulito → z, encode rumoroso → g_t, L_x + β·L_z
+  - `sample(z, shape, n_steps)`: DDIM reverse process con guidance
+  - **Test isolato:** gradienti propagati, no NaN, loss > 0
 
-- [ ] `models/losses/disentanglement.py` — Disentanglement losses
-  - `kl_divergence(mu, sigma)`: KL(N(μ,σ²) || N(0,I))
+- [x] `models/losses/disentanglement.py` — Disentanglement losses
+  - `kl_divergence(mu, sigma2)`: KL(N(μ,σ²) || N(0,I))
+  - `mahalanobis_log_prob(z, mu, sigma2)`: log q(z|x) scalare per campione
   - **Test:** KL = 0 quando μ=0, σ=1; KL > 0 altrimenti
 
-- [ ] `train.py` — Training loop toy
-  - Loop congiunto encoder + denoiser
-  - ~5k step, pochi minuti su GPU
-  - Logging: loss components, sample reconstructions
+- [x] `train.py` — Training loop toy
+  - `generate_toy_dataset()`: 10 freq × 5 amp × 1000 = 50k sinusoidi
+  - Loop congiunto encoder + denoiser, ~50 epoche
+  - Logging: loss components, scheduler cosine, checkpoint, wandb opzionale
 
-- [ ] `models/unet.py` — Denoiser minimale per toy
-  - U-Net ridotta per dati 1D/2D sintetici
-  - Time embedding sinusoidale
+- [x] `models/unet.py` — Denoiser 1D per toy
+  - U-Net 1D con 3 livelli, ResBlock con time conditioning
+  - Sinusoidal time embedding, skip connections
+  - ~50-100k parametri
 
-- [ ] `evaluate.py` — Metriche toy
+- [x] `evaluate.py` — Metriche toy
   - Scatter plot 2D del latente colorato per frequenza e ampiezza
-  - MIG su dati sintetici
+  - MIG (Mutual Information Gap) implementato manualmente
+  - Gate 1 go/no-go automatico
+
+- [x] `scripts/train_toy.slurm` — SLURM batch script
+  - GPU request, log, checkpoint, valutazione automatica post-training
+  - Parametri ottimizzati per GPU: batch=256, n_per_class=1000, T=300
+
+- [x] `scripts/train_toy_gpu.sh` — Script interattivo GPU
+  - Per sessioni `srun` o esecuzione diretta su nodo GPU
+
+- [x] KL annealing esponenziale (fix posterior collapse)
+  - β: 1e-6 → 1.0 su 12 epoche (curva esponenziale)
+  - Previene L_z=0 e garantisce guidance attiva
 
 ### Gate 1 (go/no-go dell'intero progetto)
 Scatter 2D con:
@@ -98,7 +114,15 @@ Scatter 2D con:
 - Cluster che si separano per **ampiezza** lungo l'altro
 - MIG > 0.5
 
+**Esecuzione Gate 1:**
+```bash
+# Sul cluster (automatico dopo sbatch se training ok)
+# Oppure locale dopo aver scaricato il checkpoint:
+.venv/bin/python evaluate.py --checkpoint checkpoints/toy/model_final.pt
+```
+
 **Se fallisce:** Il bug è nel codice (loss/guidance/sampling), non nell'audio. Si scopre in minuti.
+**Se passa:** Pronti per Phase 2 (β-VAE baseline su NSynth).
 
 ---
 
@@ -257,4 +281,4 @@ Tutto il resto (ablation multiple, CLUB/TC, polifonia) è incrementale.
 
 ---
 
-*Ultimo aggiornamento: 2025-07-23 — Phase 0 completata, Phase 1 da iniziare.*
+*Ultimo aggiornamento: 2025-07-28 — Phase 1 pronta per cluster GPU, posterior collapse fixato.*
