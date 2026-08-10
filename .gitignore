@@ -32,7 +32,14 @@ data/nsynth-*/
 data/*.tar.gz
 data/*.wav
 
-# Checkpoints
+# Preprocessed caches (rigenerabili con scripts/compute_norm_stats.py + precompute_mels.py)
+data/mel_cache.npy
+data/mel_meta.pkl
+
+# Containers
+*.sif
+
+# Checkpoints / model weights
 checkpoints/
 *.pt
 *.pth
@@ -54,9 +61,18 @@ multirun/
 logs/
 slurm-*.out
 
-# Plots
-plots/
+# Plots — solo i prodotti finali (demo audio + figure report) vanno in git
+plots/*
+!plots/demo/
+!plots/demo/*.wav
+!plots/finals/
+!plots/finals/*
 
 # Environment
 .env
 .env.local
+archive/
+
+# Documentation — il README è autoconclusivo, il dettaglio è nel report PDF
+docs/
+papers/

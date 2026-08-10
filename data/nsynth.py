@@ -19,6 +19,7 @@ Gate 0 Sanity Check:
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections import Counter
 from dataclasses import dataclass, field
@@ -166,10 +167,19 @@ class NSynthDataset(Dataset):
         self,
         root: str = "data/nsynth-train",
         mel_config: MelConfig = MEL_CONFIG,
+        normalize: bool = True,
     ) -> None:
         super().__init__()
         self.root = root
         self.mel_config = mel_config
+        self.normalize = normalize
+
+        # Load global normalization stats if available
+        self._norm_stats = None
+        stats_path = os.path.join(os.path.dirname(root), "norm_stats.json")
+        if os.path.isfile(stats_path):
+            import json as _json
+            self._norm_stats = _json.load(open(stats_path))
 
         json_path = os.path.join(root, "examples.json")
         if not os.path.isfile(json_path):
@@ -253,9 +263,9 @@ class NSynthDataset(Dataset):
             waveform = F.resample(waveform, sr, self.mel_config.sample_rate)
 
         mel = self._waveform_to_mel(waveform)
-
         mel = self._crop_or_pad_time(mel)
-        mel = self._normalize_per_sample(mel)
+        if self.normalize:
+            mel = self._normalize_global(mel) if self._norm_stats else self._normalize_per_sample(mel)
 
         return mel, meta
 
@@ -289,7 +299,10 @@ class NSynthDataset(Dataset):
             pad_total = target - current
             pad_left = pad_total // 2
             pad_right = pad_total - pad_left
-            mel = torch.nn.functional.pad(mel, (pad_left, pad_right), mode="constant", value=0.0)
+            mel = torch.nn.functional.pad(
+                mel, (pad_left, pad_right), mode="constant",
+                value=math.log(1e-5)  # silence floor in log-mel space (~ -11.5)
+            )
 
         return mel
 
@@ -307,6 +320,18 @@ class NSynthDataset(Dataset):
         else:
             mel = torch.zeros_like(mel)
         return mel
+
+    def _normalize_global(self, mel: torch.Tensor) -> torch.Tensor:
+        """
+        Global min-max normalization to [-1, 1] using pre-computed constants.
+
+        Fixed percentiles (robust to outliers) loaded from data/norm_stats.json.
+        Invertible — preserves dynamics and compatible with Tanh decoder.
+        """
+        lo = self._norm_stats["log_mel_min"]
+        hi = self._norm_stats["log_mel_max"]
+        mel = torch.clamp(mel, lo, hi)
+        return 2.0 * (mel - lo) / (hi - lo) - 1.0
 
     # ---- metadata resolution --------------------------------------------------
 
@@ -379,8 +404,13 @@ def mel_to_audio(
     torch.Tensor
         Reconstructed waveform of shape (1, num_samples).
     """
-    # Reverse the per-sample normalization
-    mel = (mel + 1.0) / 2.0 * 2.0 - 1.0
+    import json as _json
+    import os as _os
+    stats_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "data", "norm_stats.json")
+    if _os.path.isfile(stats_path):
+        stats = _json.load(open(stats_path))
+        lo, hi = stats["log_mel_min"], stats["log_mel_max"]
+        mel = (mel + 1.0) / 2.0 * (hi - lo) + lo  # invert global normalization
     mel_linear = torch.exp(torch.clamp(mel, min=-10.0, max=10.0))
 
     lin_spec = mel_config.inverse_mel(mel_linear)
@@ -468,12 +498,44 @@ if __name__ == "__main__":
     # Final verdict
     if shape_errors == 0 and range_errors == 0:
         print("=" * 60)
-        print("  GATE 0: PASSED ✓")
+        print("  GATE 0: PASSED")
         print("=" * 60)
         print()
         print("  Dataset is ready. Next step: Phase 1 — Toy Model")
     else:
         print("=" * 60)
-        print("  GATE 0: FAILED ✗")
+        print("  GATE 0: FAILED")
         print("=" * 60)
         sys.exit(1)
+
+
+# ===========================================================================
+# Cached Mel Dataset (for fast GPU training)
+# ===========================================================================
+
+class CachedMelDataset(torch.utils.data.Dataset):
+    """
+    Dataset that reads pre-computed mel spectrograms from a memory-mapped
+    .npy file, eliminating the .wav → mel bottleneck (~14 min/epoch).
+
+    Use after running scripts/precompute_mels.py.
+
+    Parameters
+    ----------
+    cache : str
+        Path to mel_cache.npy (memmap).
+    meta_path : str
+        Path to mel_meta.pkl (pickled metadata list).
+    """
+
+    def __init__(self, cache: str = "data/mel_cache.npy",
+                 meta_path: str = "data/mel_meta.pkl") -> None:
+        import pickle as _pickle
+        self.arr = np.load(cache, mmap_mode="r")
+        self.metas = _pickle.load(open(meta_path, "rb"))
+
+    def __len__(self) -> int:
+        return len(self.arr)
+
+    def __getitem__(self, idx: int):
+        return torch.from_numpy(self.arr[idx].copy()), self.metas[idx]

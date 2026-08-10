@@ -9,6 +9,6 @@ Provides:
 - MelConfig: Immutable configuration for audio preprocessing parameters
 """
 
-from data.nsynth import NSynthDataset, MelConfig, mel_to_audio
+from data.nsynth import NSynthDataset, MelConfig, mel_to_audio, CachedMelDataset
 
-__all__ = ["NSynthDataset", "MelConfig", "mel_to_audio"]
+__all__ = ["NSynthDataset", "MelConfig", "mel_to_audio", "CachedMelDataset"]

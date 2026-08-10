@@ -1,127 +1,143 @@
 # SAMI-Audio
 
-Disentanglement non supervisionato di pitch e timbro tramite Score-based Variational Autoencoder.
+**Score-based Autoencoders for Multiscale Inference (SAMI) applied to the unsupervised representation of musical instrument notes.**
 
-Deep Learning & Applied AI 2025/26 — Progetto.
+An audio-domain port of SAMI (Lyo, Simoncelli & Savin, 2025) on NSynth (Engel et al., 2017): a variational encoder learns a latent space where **pitch** and **timbre** are separable and manipulable, with no supervision on the factors. The "decoder" is not a separate network but the denoiser of a diffusion model, guided from the latent through a score gradient.
 
----
-
-## Roadmap
-
-### ✅ Phase 0 — Setup & Dataset (completata)
-
-| Task | File | Stato |
-|------|------|-------|
-| `pdm init`, `pyproject.toml` con dipendenze | `pyproject.toml`, `requirements.txt` | ✅ |
-| `CONVENTIONS.md` (Nodo 1-5 fissati) | `CONVENTIONS.md` | ✅ |
-| Script download NSynth subset | `data/download.sh` | ✅ |
-| Dataset class + preprocessing mel | `data/nsynth.py` | ✅ |
-| wandb login | — | ✅ |
-
-**Gate 0:** `pdm run gate0` — verifica shape `(1, 128, 256)` in `[-1, 1]` e audio roundtrip via Griffin-Lim.
+**Project — Deep Learning & Applied AI 2025/26, Sapienza University of Rome.**
 
 ---
 
-### 🔲 Phase 1 — Toy Model (giorni 2-5) ⬅ PROSSIMA FASE
+## Key results
 
-Obiettivo: validare il meccanismo di guidance SAMI su sinusoidi sintetiche.
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Pitch (decodability) | **R² = 0.60** | Ridge probe + train/test split + noise control |
+| Timbre (decodability) | **accuracy = 0.91** | k-NN on μ, chance baseline 25% |
+| Pitch/timbre separability | **cos(w_pitch, w_family) = 0.15** | orthogonal (random baseline 3σ = 0.53) |
+| Timbre transfer | **3/7 seeds** with full transfer | s=5, α=0.3 (honest outcome, fully documented) |
+| Posterior collapse | **Solved with free bits** | raw KL alive (31 nats at D=128) |
 
-| Task | File |
-|------|------|
-| Half-UNet minimale → `(μ, σ²)`, latente 2D | `models/encoder.py` |
-| Cosine schedule, `q_sample`, `ᾱ_t` monotona decrescente | `models/losses/diffusion.py` |
-| Core SAMI: encode pulito + rumoroso, Mahalanobis, `g_t = autograd.grad(log_q, xt)`, loss `L_x + β·L_z` | `models/sami.py` |
-| `L_KL` su `z ~ N(0,I)` | `models/losses/disentanglement.py` |
-| Training loop toy (~5k step, minuti su GPU) | `train.py` |
-| Scatter plot 2D colorato per frequenza/ampiezza, MIG | `evaluate.py` |
-
-**Gate 1 (go/no-go):** Scatter 2D con cluster separati per frequenza su un asse e ampiezza sull'altro. MIG > 0.5.
-
----
-
-### 🔲 Phase 2 — Baseline β-VAE (giorni 5-9)
-
-Obiettivo: lower bound di disentanglement su NSynth.
-
-| Task | File |
-|------|------|
-| β-VAE encoder/decoder CNN | `models/baselines.py` |
-| Train/eval su NSynth con β ∈ {1, 2, 4, 8} | `train.py`, `evaluate.py` |
-| Calcolo TAD, DCI, MIG, FactorVAE, FID, SI-SNR, log-mel L1 | `evaluate.py` |
-| (Opzionale) FactorVAE baseline | `models/baselines.py` |
-
-**Gate 2:** MIG ~0.10-0.20 con ricostruzioni sensate.
+**Artifacts in this repository:**
+- Figure of the report: `plots/finals/` (7 figures)
+- Demo audio: `plots/demo/` (147 WAV: original notes, transfer, controls)
+- Model checkpoints and full documentation live on the cluster (not pushed)
 
 ---
 
-### 🔲 Phase 3 — SAMI-Audio Base (giorni 9-16)
-
-Obiettivo: modello principale, verifica della claim centrale.
-
-**3a — Denoiser incondizionato:**
-| Task | File |
-|------|------|
-| U-Net standard, time embedding sinusoidale, no attention (base) | `models/unet.py` |
-| Pre-training denoiser su mel NSynth | `train.py` |
-| DDIM sampling → mel plausibili | `models/sami.py` |
-
-**3b — Inference network + guidance:**
-| Task | File |
-|------|------|
-| Freeze denoiser, train solo inference network (loss SAMI) | `train.py` |
-| KL annealing esponenziale, binary search β massimo | `train.py` |
-| Ablation D_latent ∈ {32, 64, 128} | config YAML |
-| Logging wandb: `L_z`, sample audio, varianza posterior | — |
-
-**Gate 3:** TAD/MIG > β-VAE a parità di FID/SI-SNR.
-
----
-
-### 🔲 Phase 4 — Demo e Timbre Map (giorni 16-22)
-
-| Task | File |
-|------|------|
-| Identificazione assi latenti (CREPE per pitch, classifier per timbro) | `evaluate.py` |
-| Timbre transfer: 4 strum. × 4 strum. heatmap | `notebooks/audio_demo.ipynb` |
-| UMAP timbre map, cluster per famiglia | `notebooks/timbre_map.ipynb` |
-| Sintesi audio via HiFi-GAN | notebooks |
-
-**Gate 4:** Heatmap transfer coerente (timbro cambia, pitch resta). Timbre map con cluster distinti.
-
----
-
-### 🔲 Phase 5 — Analisi Scale, Ablation, Report (giorni 22-28)
-
-| Task |
-|------|
-| Analisi scale di rumore caratteristiche per pitch/timbro/dinamica |
-| Esperimento loss ausiliarie: SAMI + CLUB, SAMI + FactorVAE |
-| Tabella comparativa finale: β-VAE vs FactorVAE vs SAMI |
-| Draft report + AI Use Statement |
-
----
-
-## Quick Start
-
-```bash
-# Install dependencies
-pdm install
-
-# Download NSynth subset (~21 GB download, ~4 GB after filtering)
-bash data/download.sh
-
-# Gate 0 — verify dataset
-pdm run gate0
-```
-
-## Priorità
+## Repository structure
 
 ```
-Toy model → baseline β-VAE → SAMI base run → eval + demo
+progetto-deep/
+├── data/
+│   ├── nsynth.py             # Dataset, global normalization, mel_to_audio
+│   └── norm_stats.json       # Global normalization constants
+├── models/
+│   ├── encoder.py            # MelEncoder: Half-UNet → (μ, σ²)
+│   ├── unet.py               # MelUNet: 2D denoiser (the "decoder")
+│   ├── sami.py               # SAMI core: guidance, loss, sampling
+│   ├── vae.py                # β-VAE baseline
+│   └── losses/               # DiffusionSchedule, KL, Mahalanobis
+├── scripts/                  # Active pipeline (training, demo, figures)
+├── plots/
+│   ├── finals/               # Report figures (7 PNG)
+│   └── demo/                 # Demo audio (147 WAV)
+├── train.py                  # Training (toy, disks, denoiser, SAMI)
+├── evaluate.py               # Metrics (MIG, R² probe, frechet_mel)
+├── CONVENTIONS.md            # Project immutables
+├── pyproject.toml / requirements.txt / pdm.lock
+└── README.md
 ```
+
+Not in this repository (kept on the cluster): `checkpoints/` (model weights), `data/nsynth-train/` (raw audio), `data/mel_cache.npy` (7.6 GB cache), Singularity container, logs, archive of past experiments, and the full documentation (scientific report, diagnostics, phase notes — detailed in the project report PDF).
 
 ---
 
-## Convenzioni
+## Pipeline (reproduction)
 
-Tutte le decisioni immutabili (sample rate, STFT params, β strategy, metrics, vocoder) sono documentate in [`CONVENTIONS.md`](CONVENTIONS.md). **Non modificarle** senza discutere l'impatto sull'intera pipeline.
+| Phase | What | Script | Duration |
+|-------|------|--------|----------|
+| **0 — Dataset** | Filter NSynth (4 families, pitch 48-84) | `data/download.sh` | — |
+| **0.5 — Normalization** | Global min-max constants | `python scripts/compute_norm_stats.py` | ~10 min |
+| **0.5 — Mel cache** | Pre-compute mels (removes I/O bottleneck) | `python scripts/precompute_mels.py` | ~1-2 h |
+| **1 — Toy** | Mechanism validation (sinusoids) | `python train.py --mode sami` | minutes |
+| **2 — Baseline** | β-VAE on NSynth (D=128, β=0.01) | `python train.py --mode vae-nsynth` | hours |
+| **2.7 — Disks gate** | 2D stack validation (3 factors) | `python train.py --mode sami --dataset disks` | minutes |
+| **3a — Denoiser** | Unconditional DDPM on NSynth | `sbatch scripts/train_denoiser_2d.slurm` | ~1 day |
+| **3a — DDIM gate** | Check plausible mels | `python scripts/ddim_gate.py` | minutes |
+| **3b — Encoder** | Frozen SAMI (D=32, β=1e-5, free bits) | `sbatch scripts/train_sami_encoder.slurm` | ~1 day |
+| **Demo** | Timbre transfer (s=5, α=0.3) | `python scripts/demo_fase2.py` | ~5 min |
+| **Figures** | 7 report figures | `bash scripts/run_report_figures.sh` | ~3 min |
+
+**SLURM infrastructure:** 29-min jobs with auto-resume. Per-step checkpoints (every 1500 steps) guarantee that a job killed mid-epoch resumes from the latest step — without them training would never progress (one epoch exceeds the limit on some nodes).
+
+---
+
+## Demo audio
+
+The sounds generated in the final demo are in **`plots/demo/`** — one WAV per condition:
+
+- `_A.wav` — original note (guitar, MIDI 60)
+- `_B.wav` — target note (trumpet, MIDI 67)
+- `_T.wav` — **transfer** (pitch of B on the timbre of A)
+
+**The most significant (s=5, α=0.3):**
+
+| File | What it shows |
+|------|---------------|
+| [s5.0_a0.3_seed1006_T.wav](plots/demo/s5.0_a0.3_seed1006_T.wav) | **Perfect transfer** — pitch toward trumpet, guitar timbre preserved |
+| [s5.0_a0.3_seed1001_T.wav](plots/demo/s5.0_a0.3_seed1001_T.wav) | Shifted pitch, timbre preserved (with α=0.5 the timbre degraded) |
+| [s5.0_a0.3_seed1000_T.wav](plots/demo/s5.0_a0.3_seed1000_T.wav) | Failure: guidance does not move the pitch (T=A) |
+
+Full configurations (s∈{3,5,7} × α∈{0.3,0.5,0.7,1.0}, 8 seeds each) are organized by prefix `s{scale}_a{alpha}_seed{seed}_{A,B,T}.wav`.
+
+**Report figure** (A\|T\|B spectrograms of the three cases): `plots/finals/fig6_transfer_demo.png`.
+
+---
+
+## Metrics and method (summary)
+
+- **R² probe (Ridge + split + noise control)** — how linearly decodable a factor is from the latent. The margin over the control is the primary metric.
+- **Classification accuracy** — the correct metric for timbre (categorical); Ridge R² on a categorical target is an artifact (0.29 → 0.91 with the right metric).
+- **Per-dimension KL** — distinguishes entanglement (information spread out) from disentanglement (few loaded dims).
+- **Cosine between generative directions** — factor orthogonality, interpreted against a random baseline.
+- **CREPE** — perceptual fundamental frequency for pitch (robust to harmonics and octave errors).
+
+Four measurement artifacts were discovered and fixed during the research — the measurement instrument is part of the experiment.
+
+---
+
+## Method (the idea)
+
+In a classic VAE, a deterministic decoder compresses the latent in a single z→x pass, and an expressive decoder tends to ignore z (posterior collapse). **SAMI replaces the decoder with a pre-trained frozen diffusion model**: the encoder influences generation via the guidance gradient
+
+```
+ε̂(x_t, t, z) = ε_θ(x_t, t) − s · γ_t · g_t,      g_t = ∇_{x_t} log q_φ(z | x_t)
+```
+
+applied step-by-step during the reverse diffusion. The "decoder" is therefore the **guided denoiser** — an iterative generative process, not a network. This:
+
+1. removes the encoder/decoder competition at the root of posterior collapse,
+2. acts per **noise scale** (pitch emerges at high t, timbre at low t),
+3. gives the encoder a richer, more localized learning signal.
+
+Without labels, the learned latent is **linearly separable** in pitch and timbre (R² 0.60, accuracy 0.91) with **orthogonal** directions (cos = 0.15).
+
+---
+
+## Reproducibility
+
+- Python 3.12, PyTorch, `torchcrepe` (PyTorch port), HiFi-GAN / Griffin-Lim for audio, see `pyproject.toml` and `requirements.txt`
+- Training runs on the DI Sapienza SLURM cluster (RTX 6000, 29-min jobs, Singularity container, auto-resume)
+- Raw NSynth filtered to 4 families (guitar, keyboard, string, brass), MIDI pitch [48, 84], 61,531 samples, mel (1,128,256), global normalization to [-1,1]
+
+---
+
+## References
+
+- Lyo, Simoncelli & Savin (2025). *Score-based Autoencoders for Multiscale Inference (SAMI)*. arXiv:2512.17127.
+- Ho, Jain & Abbeel (2020). *Denoising Diffusion Probabilistic Models*. NeurIPS.
+- Higgins et al. (2017). *β-VAE*. ICLR.
+- Kingma et al. (2016); Chen et al. (2017). *Free bits* (posterior collapse).
+- Engel et al. (2017). *NSynth*. ICML.
+- Kim et al. (2018). *CREPE: Pitch estimation*. ICASSP.
