@@ -127,7 +127,7 @@ Without labels, the learned latent is **linearly separable** in pitch and timbre
 
 ## Interactive demo notebook
 
-**`demo_interattiva.ipynb`** is a self-contained, inference-only notebook: it loads
+**`interactive_demo.ipynb`** is a self-contained, inference-only notebook: it loads
 the two final checkpoints, performs the timbre transfer (guitar A + pitch of trumpet B)
 and lets you **listen** to the result inline. It needs no raw NSynth data — everything
 is packed in `data/demo_inference_data.npz` (already in the repo).
@@ -137,10 +137,10 @@ To run it you need: PyTorch, torchaudio, matplotlib, scikit-learn (and optionall
 which are **not pushed to this repo** — download them from the
 [GitHub release](https://github.com/Alegau03/progetto-deep/releases) and place them at:
 
-```
-checkpoints/nsynth/denoiser_2d/model_final.pt
-checkpoints/nsynth/sami_d32/model_final.pt
-```
+| Release asset | Rename to |
+|---|---|
+| `model_final_denoiser.pt` | `checkpoints/nsynth/denoiser_2d/model_final.pt` |
+| `model_final_sami.pt` | `checkpoints/nsynth/sami_d32/model_final.pt` |
 
 The markdown cells explain step by step what each cell does and what you should hear.
 
@@ -156,11 +156,10 @@ The full pre-generated audio of every (s, α, seed) configuration is in `plots/d
 
 ---
 
-## References
+## Reproducibility
 
-- Lyo, Simoncelli & Savin (2025). *Score-based Autoencoders for Multiscale Inference (SAMI)*. arXiv:2512.17127.
-- Ho, Jain & Abbeel (2020). *Denoising Diffusion Probabilistic Models*. NeurIPS.
-- Higgins et al. (2017). *β-VAE*. ICLR.
-- Kingma et al. (2016); Chen et al. (2017). *Free bits* (posterior collapse).
-- Engel et al. (2017). *NSynth*. ICML.
-- Kim et al. (2018). *CREPE: Pitch estimation*. ICASSP.
+- Python 3.12, PyTorch, `torchcrepe` (PyTorch port), HiFi-GAN / Griffin-Lim for audio, see `pyproject.toml` and `requirements.txt`
+- Training runs on the DI Sapienza SLURM cluster (RTX 6000, 29-min jobs, Singularity container, auto-resume)
+- Raw NSynth filtered to 4 families (guitar, keyboard, string, brass), MIDI pitch [48, 84], 61,531 samples, mel (1,128,256), global normalization to [-1,1]
+
+---
