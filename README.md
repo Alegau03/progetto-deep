@@ -44,10 +44,9 @@ progetto-deep/
 │   └── demo/                 # Demo audio (147 WAV)
 ├── train.py                  # Training (toy, disks, denoiser, SAMI)
 ├── evaluate.py               # Metrics (MIG, R² probe, frechet_mel)
-├── interactive_demo.ipynb            # Interactive demo
+├── CONVENTIONS.md            # Project immutables
 ├── pyproject.toml / requirements.txt / pdm.lock
 └── README.md
-
 ```
 
 Not in this repository (kept on the cluster): `checkpoints/` (model weights), `data/nsynth-train/` (raw audio), `data/mel_cache.npy` (7.6 GB cache), Singularity container, logs, archive of past experiments, and the full documentation (scientific report, diagnostics, phase notes — detailed in the project report PDF).
@@ -128,15 +127,22 @@ Without labels, the learned latent is **linearly separable** in pitch and timbre
 
 ## Interactive demo notebook
 
-**`interactive_demo.ipynb`** is a self-contained, inference-only notebook: it loads
+**`demo_interattiva.ipynb`** is a self-contained, inference-only notebook: it loads
 the two final checkpoints, performs the timbre transfer (guitar A + pitch of trumpet B)
 and lets you **listen** to the result inline. It needs no raw NSynth data — everything
 is packed in `data/demo_inference_data.npz` (already in the repo).
 
 To run it you need: PyTorch, torchaudio, matplotlib, scikit-learn (and optionally
-`torchcrepe` for the pitch measurements) plus the two `model_final.pt` checkpoints
-(see `checkpoints/` on the cluster — they are not pushed). The markdown cells explain
-step by step what each cell does and what you should hear.
+`torchcrepe` for the pitch measurements) plus the two `model_final.pt` checkpoints,
+which are **not pushed to this repo** — download them from the
+[GitHub release](https://github.com/Alegau03/progetto-deep/releases) and place them at:
+
+```
+checkpoints/nsynth/denoiser_2d/model_final.pt
+checkpoints/nsynth/sami_d32/model_final.pt
+```
+
+The markdown cells explain step by step what each cell does and what you should hear.
 
 The full pre-generated audio of every (s, α, seed) configuration is in `plots/demo/`.
 
