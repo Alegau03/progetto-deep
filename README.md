@@ -44,7 +44,7 @@ progetto-deep/
 │   └── demo/                 # Demo audio (147 WAV)
 ├── train.py                  # Training (toy, disks, denoiser, SAMI)
 ├── evaluate.py               # Metrics (MIG, R² probe, frechet_mel)
-├── CONVENTIONS.md            # Project immutables
+├── interactive_demo.ipynb    # Interactive Notebook for demo
 ├── pyproject.toml / requirements.txt / pdm.lock
 └── README.md
 ```

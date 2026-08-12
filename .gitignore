@@ -57,6 +57,7 @@ multirun/
 # Notebooks
 .ipynb_checkpoints/
 *.ipynb
+!interactive_demo.ipynb
 
 # Logs
 *.log
