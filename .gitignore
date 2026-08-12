@@ -28,8 +28,7 @@ env/
 Thumbs.db
 # Notebooks
 .ipynb_checkpoints/
-*.ipynb
-!demo_interattiva.ipynb
+
 # Project data — raw NSynth downloads and extracted audio
 data/nsynth-*/
 data/*.tar.gz
